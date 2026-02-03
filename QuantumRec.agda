@@ -8,6 +8,7 @@ module QuantumRec where
     open import Data.Fin using (Fin)
     open import Data.Vec using (Vec; []; _∷_; map; zipWith; lookup; updateAt)
     open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong)
+    open import Relation.Nullary.Decidable using (⌊_⌋)
 
     module Semantics (kC kQ : ℕ) where
         CVar : Set
@@ -61,4 +62,25 @@ module QuantumRec where
         evalMany : ∀ {n} → Store → Vec Exp n → Vec ℕ n
         evalMany σ []       = []
         evalMany σ (e ∷ es) = evalExp σ e ∷ evalMany σ es
-        
+
+        -- yeah yeah I know cumbersome but better to have to pass these around as program expressions 
+        data BExp : Set where 
+            tt ff : BExp
+            _≤e_  : Exp → Exp → BExp
+            _≟e_  : Exp → Exp → BExp
+            not   : BExp → BExp
+            _and_ : BExp → BExp → BExp
+            _or_  : BExp → BExp → BExp
+
+        evalB : Store → BExp → Bool
+        evalB s tt = true
+        evalB s ff = false
+        evalB s (e₁ ≤e e₂) = ⌊ evalExp s e₁ ≤? evalExp s e₂ ⌋
+        evalB s (e₁ ≟e e₂) =  ⌊ evalExp s e₁ ≟ evalExp s e₂ ⌋
+        evalB s (not b) = if evalB s b then false else true
+        evalB s (b₁ and b₂) = if evalB s b₁ then evalB s b₂ else false
+        evalB s (b₁ or  b₂) = if evalB s b₁ then true else evalB s b₂
+
+
+
+         
