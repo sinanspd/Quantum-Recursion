@@ -9,6 +9,7 @@ module QuantumRec where
     open import Data.Vec using (Vec; []; _∷_; map; zipWith; lookup; updateAt)
     open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong)
     open import Relation.Nullary.Decidable using (⌊_⌋)
+   
 
     module Semantics (kC kQ : ℕ) where
         CVar : Set
@@ -82,5 +83,79 @@ module QuantumRec where
         evalB s (b₁ or  b₂) = if evalB s b₁ then true else evalB s b₂
 
 
+        -- Now the fun stuff 
 
-         
+        data QState : Set where 
+            atom : ℕ → QState
+            aply   : UConst → QState → QState
+            split : ∀ {m d} → Vec QVar m → Vec Coeff d → Vec QState d → QState -- this term comes from the paper 
+
+        data Cmd : Set where 
+            skip : Cmd 
+            halt : Cmd -- ↓ terminal marker, need otherwise termination not proveable 
+            assign : ∀ {n} → Vec CVar n → Vec Exp n → Cmd
+            gate   : ∀ {n} → UConst → Vec QVar n → Cmd
+            seq    : Cmd → Cmd → Cmd
+            if_    : BExp → Cmd → Cmd → Cmd
+            while_ : BExp → Cmd → Cmd
+            qif    : ∀ {m d} → Vec QVar m → Vec Cmd d → Cmd
+            beginLocal : ∀ {n} → Vec CVar n → Vec Exp n → Cmd → Cmd
+            call0  : ProcId → Cmd
+            callN  : ProcId → (Σ ℕ (λ n → Vec Exp n)) → Cmd
+
+        
+        record DeclN : Set where
+            constructor mkDeclN
+            field
+                pid     : ProcId
+                arity   : ℕ
+                formals : Vec CVar arity
+                body    : Cmd
+
+        data DeclItem : Set where
+            decl0 : ProcId → Cmd → DeclItem
+            declN : DeclN → DeclItem
+
+        Decls : Set
+        Decls = List DeclItem
+
+        lookup0 : ProcId → Decls → Maybe Cmd
+        lookup0 P [] = nothing
+        lookup0 P (decl0 P' C ∷ ds) with ⌊ P ≟ P' ⌋
+        ... | true  = just C
+        ... | false = lookup0 P ds
+        lookup0 P (_ ∷ ds) = lookup0 P ds
+
+        lookupN : ProcId → Decls → Maybe DeclN
+        lookupN P [] = nothing
+        lookupN P (declN d ∷ ds) with ⌊ P ≟ DeclN.pid d ⌋
+        ... | true  = just d
+        ... | false = lookupN P ds
+        lookupN P (_ ∷ ds) = lookupN P ds
+
+        record Config : Set where
+            constructor ⟨_,_,_⟩
+            field 
+                c : Cmd
+                σ : Store
+                ψ : QState
+        open Config public
+
+        data C3 {A B C : Set} (P : A → B → C → Set) :
+                    ∀ {n} → Vec A n → Vec B n → Vec C n → Set where
+            c3nil  : C3 P [] [] []
+            c3cons : ∀ {n a b c as bs cs}
+                    → P a b c
+                    → C3 P as bs cs
+                    → C3 P (a ∷ as) (b ∷ bs) (c ∷ cs)
+
+        mutual 
+            data Step (D : Decls) : Config → Config → Set where
+                SK : ∀ {σ ψ} → Step D ⟨ skip , σ , ψ ⟩ ⟨ halt , σ , ψ ⟩
+
+                -- rest of the rules in the paper TBD 
+
+
+        data Steps (D : Decls) : Config → Config → Set where
+            refl  : ∀ {x} → Steps D x x
+            trans : ∀ {x y z} → Step D x y → Steps D y z → Steps D x z
