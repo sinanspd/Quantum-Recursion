@@ -155,6 +155,9 @@ module QuantumRec where
                 AS : ∀ {n} {xs : Vec CVar n} {ts : Vec Exp n} {σ ψ}
                     → Step D ⟨ assign xs ts , σ , ψ ⟩
                             ⟨ halt , setMany σ xs (evalMany σ ts) , ψ ⟩
+                GA : ∀ {n} {U : UConst} {qs : Vec QVar n} {σ ψ}
+                    → Step D ⟨ gate U qs , σ , ψ ⟩
+                            ⟨ halt , σ , act U ψ ⟩
 
                 -- rest of the rules in the paper TBD
 
