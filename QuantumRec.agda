@@ -1,6 +1,6 @@
 module QuantumRec where
     open import Agda.Primitive using (Level; lzero)
-    open import Data.Nat using (ℕ; zero; suc; _+_; _-_; _≤?_ ; _≟_)
+    open import Data.Nat using (ℕ; zero; suc; _+_; _∸_; _≤?_ ; _≟_)
     open import Data.Bool using (Bool; true; false; if_then_else_)
     open import Data.Maybe using (Maybe; just; nothing)
     open import Data.Product using (Σ; Σ-syntax; _,_; proj₁; proj₂)
@@ -22,19 +22,19 @@ module QuantumRec where
         UConst : Set
         UConst = ℕ
 
-        postulate: 
-            Coeff: Set
+        postulate 
+            Coeff : Set
 
         -- Classical Stuff 
 
-        Store: Set 
-        Store = Vec ℕ κC  
+        Store : Set 
+        Store = Vec ℕ kC  
 
         get : Store → CVar → ℕ
-        get s x = lookup x s
+        get s x = lookup s x
 
         set : Store → CVar → ℕ → Store
-        set s x v = updateAt x (λ _ → v) s
+        set s x v = updateAt s x (λ _ → v) 
 
         getMany : ∀ {n} → Store → Vec CVar n → Vec ℕ n
         getMany s []       = []
@@ -51,3 +51,14 @@ module QuantumRec where
             var   : CVar → Exp
             _+e_  : Exp → Exp → Exp
             _-e_  : Exp → Exp → Exp
+
+        evalExp : Store → Exp → ℕ
+        evalExp s (const n) = n 
+        evalExp s (var x) = get s x 
+        evalExp s (e₁ +e e₂) = evalExp s e₁ + evalExp s e₂
+        evalExp σ (e₁ -e e₂) = evalExp σ e₁ ∸ evalExp σ e₂
+
+        evalMany : ∀ {n} → Store → Vec Exp n → Vec ℕ n
+        evalMany σ []       = []
+        evalMany σ (e ∷ es) = evalExp σ e ∷ evalMany σ es
+        
