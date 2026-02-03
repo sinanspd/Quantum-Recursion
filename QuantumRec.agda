@@ -45,3 +45,9 @@ module QuantumRec where
         setMany s (x ∷ xs) (v ∷ vs) = setMany (set s x v) xs vs
 
         -- do the expressions and evals for the expressions next 
+
+        data Exp : Set where
+            const : ℕ → Exp
+            var   : CVar → Exp
+            _+e_  : Exp → Exp → Exp
+            _-e_  : Exp → Exp → Exp
