@@ -9,12 +9,12 @@ module QuantumRec where
     open import Data.Vec using (Vec; []; _∷_; map; zipWith; lookup; updateAt)
     open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong)
 
-    module Semantics (κC κQ : ℕ) where
+    module Semantics (kC kQ : ℕ) where
         CVar : Set
-        CVar = Fin κC
+        CVar = Fin kC
 
         QVar : Set
-        QVar = Fin κQ
+        QVar = Fin kQ
 
         ProcId : Set
         ProcId = ℕ
@@ -31,17 +31,17 @@ module QuantumRec where
         Store = Vec ℕ κC  
 
         get : Store → CVar → ℕ
-        get σ x = lookup x σ
+        get s x = lookup x s
 
         set : Store → CVar → ℕ → Store
-        set σ x v = updateAt x (λ _ → v) σ
+        set s x v = updateAt x (λ _ → v) s
 
         getMany : ∀ {n} → Store → Vec CVar n → Vec ℕ n
-        getMany σ []       = []
-        getMany σ (x ∷ xs) = get σ x ∷ getMany σ xs
+        getMany s []       = []
+        getMany s (x ∷ xs) = get s x ∷ getMany s xs
 
         setMany : ∀ {n} → Store → Vec CVar n → Vec ℕ n → Store
-        setMany σ []       []       = σ
-        setMany σ (x ∷ xs) (v ∷ vs) = setMany (set σ x v) xs vs
+        setMany s []       []       = s
+        setMany s (x ∷ xs) (v ∷ vs) = setMany (set s x v) xs vs
 
         -- do the expressions and evals for the expressions next 
