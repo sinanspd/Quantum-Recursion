@@ -152,8 +152,11 @@ module QuantumRec where
         mutual 
             data Step (D : Decls) : Config → Config → Set where
                 SK : ∀ {σ ψ} → Step D ⟨ skip , σ , ψ ⟩ ⟨ halt , σ , ψ ⟩
+                AS : ∀ {n} {xs : Vec CVar n} {ts : Vec Exp n} {σ ψ}
+                    → Step D ⟨ assign xs ts , σ , ψ ⟩
+                            ⟨ halt , setMany σ xs (evalMany σ ts) , ψ ⟩
 
-                -- rest of the rules in the paper TBD 
+                -- rest of the rules in the paper TBD
 
 
         data Steps (D : Decls) : Config → Config → Set where
