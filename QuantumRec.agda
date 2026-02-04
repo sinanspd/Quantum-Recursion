@@ -157,7 +157,10 @@ module QuantumRec where
                             ⟨ halt , setMany σ xs (evalMany σ ts) , ψ ⟩
                 GA : ∀ {n} {U : UConst} {qs : Vec QVar n} {σ ψ}
                     → Step D ⟨ gate U qs , σ , ψ ⟩
-                            ⟨ halt , σ , act U ψ ⟩
+                            ⟨ halt , σ , aply U ψ ⟩
+                SC : ∀ {C₁ C₁' C₂ σ σ' ψ ψ'}
+                    → Step D ⟨ C₁ , σ , ψ ⟩ ⟨ C₁' , σ' , ψ' ⟩
+                    → Step D ⟨ seq C₁ C₂ , σ , ψ ⟩ ⟨ seq C₁' C₂ , σ' , ψ' ⟩
 
                 -- rest of the rules in the paper TBD
 
