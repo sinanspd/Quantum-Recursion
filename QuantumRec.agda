@@ -7,16 +7,12 @@ open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (Σ; _,_; proj₁; proj₂; _×_)
 open import Data.Vec using (Vec; []; _∷_; map; lookup; updateAt)
-open import Data.Fin using (Fin; _≟_)  -- Fin equality is Dec
+open import Data.Fin using (Fin; _≟_)  
 open import Relation.Nullary using (Dec; yes; no)
 open import Relation.Nullary.Decidable using (⌊_⌋)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
 open import Data.List as List using (List) renaming ([] to []ᴸ; _∷_ to _∷ᴸ_)
-
-------------------------------------------------------------------------
--- Semantics parameterized by # classical vars and # quantum vars
-------------------------------------------------------------------------
 
 module Semantics (kC kQ : ℕ) where
 
@@ -32,13 +28,8 @@ module Semantics (kC kQ : ℕ) where
   UConst : Set
   UConst = ℕ
 
-  -- coefficients are irrelevant for typechecking; use ℕ as a placeholder
   Coeff : Set
   Coeff = ℕ
-
-  ----------------------------------------------------------------------
-  -- Classical store + expressions
-  ----------------------------------------------------------------------
 
   Store : Set
   Store = Vec ℕ kC
@@ -73,18 +64,10 @@ module Semantics (kC kQ : ℕ) where
   evalMany σ []       = []
   evalMany σ (e ∷ es) = evalExp σ e ∷ evalMany σ es
 
-  ----------------------------------------------------------------------
-  -- Symbolic quantum state (enough to state the paper's QC rule)
-  ----------------------------------------------------------------------
-
   data QState : Set where
     atom  : ℕ → QState
     aply  : UConst → QState → QState
     split : ∀ {m d} → Vec QVar m → Vec Coeff d → Vec QState d → QState
-
-  ----------------------------------------------------------------------
-  -- Commands (paper core)
-  ----------------------------------------------------------------------
 
   data Cmd : Set where
     skip  : Cmd
@@ -100,10 +83,6 @@ module Semantics (kC kQ : ℕ) where
 
     call0  : ProcId → Cmd
     callN  : ∀ {n} → ProcId → Vec Exp n → Cmd
-
-  ----------------------------------------------------------------------
-  -- Declarations + witnesses (avoids lookup equality headaches)
-  ----------------------------------------------------------------------
 
   data DeclItem : Set where
     decl0 : ProcId → Cmd → DeclItem
@@ -147,10 +126,6 @@ module Semantics (kC kQ : ℕ) where
   findN {n} P (declN {n'} P' xs C ∷ᴸ ds) | yes refl | no _ | just (xs' , (C' , h)) = just (xs' , (C' , thereN h))
   findN {n} P (declN {n'} P' xs C ∷ᴸ ds) | yes refl | yes refl = just (xs , (C , hereN))
 
-  ----------------------------------------------------------------------
-  -- Configurations
-  ----------------------------------------------------------------------
-
   record Config : Set where
     constructor ⟨_,_,_⟩
     field
@@ -158,10 +133,6 @@ module Semantics (kC kQ : ℕ) where
       st  : Store
       qs  : QState
   open Config public
-
-  ----------------------------------------------------------------------
-  -- Small-step semantics + closure (QC uses BranchSteps, no C3)
-  ----------------------------------------------------------------------
 
   mutual
     data Step (D : Decls) : Config → Config → Set where
@@ -233,10 +204,6 @@ module Semantics (kC kQ : ℕ) where
   liftSeq Steps.refl = Steps.refl
   liftSeq (Steps.trans s ss) = Steps.trans (SC s) (liftSeq ss)
 
-  ----------------------------------------------------------------------
-  -- Computable equality on Stores (for the evaluator's qif branch)
-  ----------------------------------------------------------------------
-
   storeEq : Store → Store → Bool
   storeEq = vecEq
     where
@@ -252,15 +219,10 @@ module Semantics (kC kQ : ℕ) where
   ... | true  = coinEq xs ys
   ... | false = false
 
-  -- Helper to compare vectors of potentially different lengths
   coinEqAny : ∀ {m n} → Vec QVar m → Vec QVar n → Bool
   coinEqAny {m} {n} xs ys with m Data.Nat.≟ n
   ... | no _ = false
   ... | yes refl = coinEq xs ys
-
-  ----------------------------------------------------------------------
-  -- Fuelled evaluator
-  ----------------------------------------------------------------------
 
   mutual
     eval : ℕ → Decls → Cmd → Store → QState → Maybe (Store × QState)
@@ -313,3 +275,4 @@ module Semantics (kC kQ : ℕ) where
     ...   | nothing = nothing
     ...   | just (σ₂ , θs') =
           if storeEq σ₁ σ₂ then just (σ₁ , θ₁ ∷ θs') else nothing
+
