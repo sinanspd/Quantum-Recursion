@@ -16,6 +16,11 @@ open import Data.List as List using (List) renaming ([] to []ᴸ; _∷_ to _∷�
 
 module Semantics (kC kQ : ℕ) where
 
+
+  ---------------- 
+  -- Basic definitions
+  ----------------  
+
   CVar : Set
   CVar = Fin kC
 
@@ -134,6 +139,11 @@ module Semantics (kC kQ : ℕ) where
       qs  : QState
   open Config public
 
+
+  -----------------
+  --- Rules from the paper
+  ----------------
+
   mutual
     data Step (D : Decls) : Config → Config → Set where
       SK : ∀ {σ ψ}
@@ -223,6 +233,10 @@ module Semantics (kC kQ : ℕ) where
   coinEqAny {m} {n} xs ys with m Data.Nat.≟ n
   ... | no _ = false
   ... | yes refl = coinEq xs ys
+
+  ---------------- 
+  -- Eval Rules 
+  ----------------
 
   mutual
     eval : ℕ → Decls → Cmd → Store → QState → Maybe (Store × QState)
