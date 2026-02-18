@@ -196,10 +196,10 @@ module Semantics (kC kQ : ℕ) where
     data BranchSteps (D : Decls) :
       ∀ {d} → Vec Cmd d → Store → Vec QState d → Store → Vec QState d → Set where
       bs-nil  : ∀ {σ σ'} → BranchSteps D [] σ [] σ' []
-      bs-cons : ∀ {d C Cs σ σ' θ θs θ' θs'}
+      bs-cons : ∀ {d C Cs σ σ' θ θ' θs θs'}
               → Steps D ⟨ C , σ , θ ⟩ ⟨ halt , σ' , θ' ⟩
-              → BranchSteps D Cs σ θs σ' θs'
-              → BranchSteps D (C ∷ Cs) σ (θ ∷ θs) σ' (θ' ∷ θs')
+              → BranchSteps D {d} Cs σ θs σ' θs'
+              → BranchSteps D {suc d} (C ∷ Cs) σ (θ ∷ θs) σ' (θ' ∷ θs')
 
   steps-single : ∀ {D x y} → Step D x y → Steps D x y
   steps-single s = Steps.trans s Steps.refl
@@ -289,4 +289,84 @@ module Semantics (kC kQ : ℕ) where
     ...   | nothing = nothing
     ...   | just (σ₂ , θs') =
           if storeEq σ₁ σ₂ then just (σ₁ , θ₁ ∷ θs') else nothing
+
+  postulate
+    eval-sound-qif :
+      ∀ {fuel D m d} {coin : Vec QVar m} {branches : Vec Cmd d}
+        {σ : Store} {ψ : QState} {σ' : Store} {ψ' : QState}
+      → eval fuel D (qif coin branches) σ ψ ≡ just (σ' , ψ')
+      → Steps D ⟨ qif coin branches , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
+
+  eval-sound :
+    ∀ {fuel D C σ ψ σ' ψ'}
+    → eval fuel D C σ ψ ≡ just (σ' , ψ')
+    → Steps D ⟨ C , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
+
+  eval-sound {fuel = zero} ()
+
+  eval-sound {fuel = suc k} {C = skip} refl =
+    steps-single SK
+
+  eval-sound {fuel = suc k} {C = halt} refl =
+    Steps.refl
+
+  eval-sound {fuel = suc k} {C = assign xs ts} refl =
+    steps-single AS
+
+  eval-sound {fuel = suc k} {C = gate U qs} refl =
+    steps-single GA
+
+  -- Evaluate C₁ to completion, if it succeeds then evaluate C₂ to completion, and stitch the two together
+  -- run eval-sound eq₁ to halt 
+  -- liftSeq uses SC rule to lift the steps inside seq C₁ C₂, ⟨seq C₁ C₂⟩ → ⟨seq halt C₂⟩
+  -- SC-halt rewrites seq halt C₂ → C₂ 
+  -- eval-sound eq₂ runs C₂ to halt 
+  -- steps-++ composes the two 
+  eval-sound {fuel = suc k} {D} {C = seq C₁ C₂} {σ} {ψ} {σ'} {ψ'} eq
+    with eval k D C₁ σ ψ in eq₁
+  ... | nothing =
+        impossible eq
+    where
+      impossible :
+        nothing ≡ just (σ' , ψ') →
+        Steps D ⟨ seq C₁ C₂ , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
+      impossible ()
+  ... | just (σ₁ , ψ₁)
+    with eval k D C₂ σ₁ ψ₁ in eq₂
+  ... | nothing =
+        impossible₂ eq
+    where
+      impossible₂ :
+        nothing ≡ just (σ' , ψ') →
+        Steps D ⟨ seq C₁ C₂ , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
+      impossible₂ ()
+  ... | just (σ₂ , ψ₂)
+    with eq
+  ... | refl =
+      steps-++
+        (liftSeq (eval-sound {fuel = k} {C = C₁} eq₁))
+        (Steps.trans SC-halt (eval-sound {fuel = k} {C = C₂} eq₂))
+
+
+  eval-sound {fuel = suc k} {D} {C = beginLocal xs ts C} {σ} {ψ} eq =
+    Steps.trans BS (eval-sound {fuel = k}
+      {C = seq (assign xs ts) (seq C (assign xs (map const (getMany σ xs))))}
+      eq)
+
+  eval-sound {fuel = suc k} {D} {C = call0 P} {σ} {ψ} eq
+    with find0 P D in eq₀
+  ... | nothing with eq
+  ...   | ()
+  ... | just (Cbody , h) =
+      Steps.trans (CR h) (eval-sound {fuel = k} {C = Cbody} eq)
+
+  eval-sound {fuel = suc k} {D} {C = callN {n} P args} {σ} {ψ} eq
+    with findN {n} P D in eq₀
+  ... | nothing with eq
+  ...   | ()
+  ... | just (xs , (Cbody , h)) =
+      Steps.trans (RC h) (eval-sound {fuel = k} {C = beginLocal xs args Cbody} eq)
+
+  eval-sound {fuel = suc k} {C = qif coin branches} eq =
+    eval-sound-qif eq
 
