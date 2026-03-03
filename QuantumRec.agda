@@ -347,26 +347,44 @@ module Semantics (kC kQ : ℕ) where
         (liftSeq (eval-sound {fuel = k} {C = C₁} eq₁))
         (Steps.trans SC-halt (eval-sound {fuel = k} {C = C₂} eq₂))
 
-
-  eval-sound {fuel = suc k} {D} {C = beginLocal xs ts C} {σ} {ψ} eq =
-    Steps.trans BS (eval-sound {fuel = k}
-      {C = seq (assign xs ts) (seq C (assign xs (map const (getMany σ xs))))}
-      eq)
-
-  eval-sound {fuel = suc k} {D} {C = call0 P} {σ} {ψ} eq
+  eval-sound {fuel = suc k} {D} {C = call0 P} {σ} {ψ} {σ'} {ψ'} eq
     with find0 P D in eq₀
   ... | nothing with eq
   ...   | ()
-  ... | just (Cbody , h) =
+  eval-sound {fuel = suc k} {D} {C = call0 P} {σ} {ψ} {σ'} {ψ'} eq
+    | just (Cbody , h) =
       Steps.trans (CR h) (eval-sound {fuel = k} {C = Cbody} eq)
 
-  eval-sound {fuel = suc k} {D} {C = callN {n} P args} {σ} {ψ} eq
+  eval-sound {fuel = suc k} {D} {C = callN {n} P args} {σ} {ψ} {σ'} {ψ'} eq
     with findN {n} P D in eq₀
   ... | nothing with eq
   ...   | ()
-  ... | just (xs , (Cbody , h)) =
+  eval-sound {fuel = suc k} {D} {C = callN {n} P args} {σ} {ψ} {σ'} {ψ'} eq
+    | just (xs , (Cbody , h)) =
       Steps.trans (RC h) (eval-sound {fuel = k} {C = beginLocal xs args Cbody} eq)
 
   eval-sound {fuel = suc k} {C = qif coin branches} eq =
-    eval-sound-qif eq
+    eval-sound-qif {fuel = suc k} eq
 
+
+-- EX
+module Example where
+  open Semantics 2 2
+
+  open import Data.Fin using (zero)
+
+  σ0 : Store
+  σ0 = 0 ∷ 0 ∷ []
+
+  ψ0 : QState
+  ψ0 = atom 0
+
+  prog : Cmd
+  prog = seq (assign (zero ∷ []) (const 3 ∷ []))
+             (gate 0 (zero ∷ []))
+
+  Ds : Decls
+  Ds = []ᴸ
+
+  ex : eval 10 Ds prog σ0 ψ0 ≡ just (setMany σ0 (zero ∷ []) (3 ∷ []) , aply 0 ψ0)
+  ex = refl
