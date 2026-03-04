@@ -365,26 +365,18 @@ module Semantics (kC kQ : ℕ) where
 
   eval-sound {fuel = suc k} {C = qif coin branches} eq =
     eval-sound-qif {fuel = suc k} eq
+  
+  eval-sound {fuel = suc k} {D} {C = beginLocal xs ts C} {σ} {ψ} {σ'} {ψ'} eq =
+    Steps.trans BS
+      (eval-sound
+        {fuel = k}
+        {D = D}
+        {C = seq (assign xs ts)
+                  (seq C (assign xs (map const (getMany σ xs))))}
+        {σ = σ}
+        {ψ = ψ}
+        {σ' = σ'}
+        {ψ' = ψ'}
+        eq)
 
 
--- EX
-module Example where
-  open Semantics 2 2
-
-  open import Data.Fin using (zero)
-
-  σ0 : Store
-  σ0 = 0 ∷ 0 ∷ []
-
-  ψ0 : QState
-  ψ0 = atom 0
-
-  prog : Cmd
-  prog = seq (assign (zero ∷ []) (const 3 ∷ []))
-             (gate 0 (zero ∷ []))
-
-  Ds : Decls
-  Ds = []ᴸ
-
-  ex : eval 10 Ds prog σ0 ψ0 ≡ just (setMany σ0 (zero ∷ []) (3 ∷ []) , aply 0 ψ0)
-  ex = refl
