@@ -3,7 +3,7 @@ module QuantumRec where
 open import Agda.Primitive using (Level; lzero)
 
 open import Data.Nat using (ℕ; zero; suc; _+_; _∸_; _≟_)
-open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.Bool using (Bool; true; false; if_then_else_; not; _∧_; _∨_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (Σ; _,_; proj₁; proj₂; _×_)
 open import Data.Vec using (Vec; []; _∷_; map; lookup; updateAt)
@@ -68,6 +68,47 @@ module Semantics (kC kQ : ℕ) where
   evalMany : ∀ {n} → Store → Vec Exp n → Vec ℕ n
   evalMany σ []       = []
   evalMany σ (e ∷ es) = evalExp σ e ∷ evalMany σ es
+
+  ----------------
+  -- Boolean expressions for QC+  -- I had these in the first version, adding these back in
+  ----------------
+
+  _≤ℕ_ : ℕ → ℕ → Bool
+  zero    ≤ℕ n       = true
+  suc m   ≤ℕ zero    = false
+  suc m   ≤ℕ suc n   = m ≤ℕ n
+
+  _<ℕ_ : ℕ → ℕ → Bool
+  m <ℕ n = suc m ≤ℕ n
+
+  data BExp : Set where
+    btrue  : BExp
+    bfalse : BExp
+    _==e_  : Exp → Exp → BExp
+    _<e_   : Exp → Exp → BExp
+    _≤e_   : Exp → Exp → BExp
+    notb   : BExp → BExp
+    _andb_ : BExp → BExp → BExp
+    _orb_  : BExp → BExp → BExp
+
+  evalBExp : Store → BExp → Bool
+  evalBExp σ btrue          = true
+  evalBExp σ bfalse         = false
+  evalBExp σ (e₁ ==e e₂) with evalExp σ e₁ Data.Nat.≟ evalExp σ e₂
+  ... | yes _ = true
+  ... | no  _ = false
+  evalBExp σ (e₁ <e e₂)     = evalExp σ e₁ <ℕ evalExp σ e₂
+  evalBExp σ (e₁ ≤e e₂)     = evalExp σ e₁ ≤ℕ evalExp σ e₂
+  evalBExp σ (notb b)       = not (evalBExp σ b)
+  evalBExp σ (b₁ andb b₂)   = evalBExp σ b₁ ∧ evalBExp σ b₂
+  evalBExp σ (b₁ orb b₂)    = evalBExp σ b₁ ∨ evalBExp σ b₂
+
+  ----------------
+  -- Basis labels (symbolic stand-in for {|ψᵢ⟩})
+  ----------------
+
+  BasisLabel : Set
+  BasisLabel = ℕ
 
   data QState : Set where
     atom  : ℕ → QState
@@ -380,3 +421,24 @@ module Semantics (kC kQ : ℕ) where
         eq)
 
 
+-- EX
+module Example where
+  open Semantics 2 2
+
+  open import Data.Fin using (zero)
+
+  σ0 : Store
+  σ0 = 0 ∷ 0 ∷ []
+
+  ψ0 : QState
+  ψ0 = atom 0
+
+  prog : Cmd
+  prog = seq (assign (zero ∷ []) (const 3 ∷ []))
+             (gate 0 (zero ∷ []))
+
+  Ds : Decls
+  Ds = []ᴸ
+
+  ex : eval 10 Ds prog σ0 ψ0 ≡ just (setMany σ0 (zero ∷ []) (3 ∷ []) , aply 0 ψ0)
+  ex = refl
