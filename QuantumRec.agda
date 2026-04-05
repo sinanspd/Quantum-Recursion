@@ -112,8 +112,8 @@ module Semantics (kC kQ : ℕ) where
 
   data QState : Set where
     atom  : ℕ → QState
-    aply  : UConst → QState → QState
-    split : ∀ {m d} → Vec QVar m → Vec Coeff d → Vec QState d → QState
+    aply  : ∀ {n} → UConst → Vec QVar n → QState → QState -- Vec QVar n models a register 
+    split : ∀ {m d} → Vec QVar m → Vec BasisLabel d → Vec Coeff d → Vec QState d → QState
 
   data Cmd : Set where
     skip  : Cmd
@@ -123,7 +123,10 @@ module Semantics (kC kQ : ℕ) where
     gate   : ∀ {n} → UConst → Vec QVar n → Cmd
     seq    : Cmd → Cmd → Cmd
 
-    qif    : ∀ {m d} → Vec QVar m → Vec Cmd d → Cmd
+    ifte   : BExp → Cmd → Cmd → Cmd
+    while  : BExp → Cmd → Cmd
+
+    qif    : ∀ {m d} → Vec QVar m → Vec BasisLabel d → Vec Cmd d → Cmd
 
     beginLocal : ∀ {n} → Vec CVar n → Vec Exp n → Cmd → Cmd
 
@@ -180,10 +183,55 @@ module Semantics (kC kQ : ℕ) where
       qs  : QState
   open Config public
 
+  natVecEq : ∀ {n} → Vec ℕ n → Vec ℕ n → Bool
+  natVecEq []       []       = true
+  natVecEq (x ∷ xs) (y ∷ ys) with ⌊ x Data.Nat.≟ y ⌋
+  ... | true  = natVecEq xs ys
+  ... | false = false
+
+  storeEq : Store → Store → Bool
+  storeEq = natVecEq
+
+  basisEq : ∀ {d} → Vec BasisLabel d → Vec BasisLabel d → Bool
+  basisEq = natVecEq
+
+  basisEqAny : ∀ {m n} → Vec BasisLabel m → Vec BasisLabel n → Bool
+  basisEqAny {m} {n} xs ys with m Data.Nat.≟ n
+  ... | no _ = false
+  ... | yes refl = basisEq xs ys
+
+  qvarInVec : ∀ {n} → QVar → Vec QVar n → Bool
+  qvarInVec q [] = false
+  qvarInVec q (x ∷ xs) with ⌊ q Data.Fin.≟ x ⌋
+  ... | true  = true
+  ... | false = qvarInVec q xs
+
+  mutual
+    cmdTouches : Cmd → QVar → Bool
+    cmdTouches skip q = false
+    cmdTouches halt q = false
+    cmdTouches (assign xs ts) q = false
+    cmdTouches (gate U qs) q = qvarInVec q qs
+    cmdTouches (seq C₁ C₂) q = cmdTouches C₁ q ∨ cmdTouches C₂ q
+    cmdTouches (ifte b C₁ C₂) q = cmdTouches C₁ q ∨ cmdTouches C₂ q
+    cmdTouches (while b C) q = cmdTouches C q
+    cmdTouches (qif coin basis branches) q = qvarInVec q coin ∨ branchesTouch branches q
+    cmdTouches (beginLocal xs ts C) q = cmdTouches C q
+    cmdTouches (call0 P) q = false
+    cmdTouches (callN P args) q = false
+
+    branchesTouch : ∀ {d} → Vec Cmd d → QVar → Bool
+    branchesTouch [] q = false
+    branchesTouch (C ∷ Cs) q = cmdTouches C q ∨ branchesTouch Cs q
+
+  externalQif : ∀ {m d} → Vec QVar m → Vec Cmd d → Bool
+  externalQif [] branches = true
+  externalQif (q ∷ qs) branches =
+    not (branchesTouch branches q) ∧ externalQif qs branches
 
   -----------------
   --- Rules from the paper
-  ----------------
+  -----------------
 
   mutual
     data Step (D : Decls) : Config → Config → Set where
@@ -196,7 +244,7 @@ module Semantics (kC kQ : ℕ) where
 
       GA : ∀ {n} {U : UConst} {qs : Vec QVar n} {σ ψ}
          → Step D ⟨ gate U qs , σ , ψ ⟩
-                  ⟨ halt , σ , aply U ψ ⟩
+                  ⟨ halt , σ , aply U qs ψ ⟩
 
       SC : ∀ {C₁ C₁' C₂ σ σ' ψ ψ'}
          → Step D ⟨ C₁ , σ , ψ ⟩ ⟨ C₁' , σ' , ψ' ⟩
@@ -204,6 +252,18 @@ module Semantics (kC kQ : ℕ) where
 
       SC-halt : ∀ {C₂ σ ψ}
               → Step D ⟨ seq halt C₂ , σ , ψ ⟩ ⟨ C₂ , σ , ψ ⟩
+
+      IF-true : ∀ {b C₁ C₂ σ ψ}
+              → evalBExp σ b ≡ true
+              → Step D ⟨ ifte b C₁ C₂ , σ , ψ ⟩ ⟨ C₁ , σ , ψ ⟩
+
+      IF-false : ∀ {b C₁ C₂ σ ψ}
+               → evalBExp σ b ≡ false
+               → Step D ⟨ ifte b C₁ C₂ , σ , ψ ⟩ ⟨ C₂ , σ , ψ ⟩
+
+      WH : ∀ {b C σ ψ}
+         → Step D ⟨ while b C , σ , ψ ⟩
+                  ⟨ ifte b (seq C (while b C)) skip , σ , ψ ⟩
 
       BS : ∀ {n} {xs : Vec CVar n} {ts : Vec Exp n} {C σ ψ}
          → Step D ⟨ beginLocal xs ts C , σ , ψ ⟩
@@ -222,13 +282,15 @@ module Semantics (kC kQ : ℕ) where
 
       QC : ∀ {m d}
            {coin : Vec QVar m}
+           {basis : Vec BasisLabel d}
            {branches : Vec Cmd d}
            {α : Vec Coeff d}
            {θ θ' : Vec QState d}
            {σ σ' : Store}
+         → externalQif coin branches ≡ true
          → BranchSteps D branches σ θ σ' θ'
-         → Step D ⟨ qif coin branches , σ , split coin α θ ⟩
-                  ⟨ halt , σ' , split coin α θ' ⟩
+         → Step D ⟨ qif coin basis branches , σ , split coin basis α θ ⟩
+                  ⟨ halt , σ' , split coin basis α θ' ⟩
 
     data Steps (D : Decls) : Config → Config → Set where
       refl  : ∀ {x} → Steps D x x
@@ -236,7 +298,7 @@ module Semantics (kC kQ : ℕ) where
 
     data BranchSteps (D : Decls) :
       ∀ {d} → Vec Cmd d → Store → Vec QState d → Store → Vec QState d → Set where
-      bs-nil  : ∀ {σ σ'} → BranchSteps D [] σ [] σ' []
+      bs-nil  : ∀ {σ} → BranchSteps D [] σ [] σ []
       bs-cons : ∀ {d C Cs σ σ' θ θ' θs θs'}
               → Steps D ⟨ C , σ , θ ⟩ ⟨ halt , σ' , θ' ⟩
               → BranchSteps D {d} Cs σ θs σ' θs'
@@ -254,15 +316,6 @@ module Semantics (kC kQ : ℕ) where
           → Steps D ⟨ seq C₁ C₂ , σ  , ψ  ⟩ ⟨ seq C₁' C₂ , σ' , ψ' ⟩
   liftSeq Steps.refl = Steps.refl
   liftSeq (Steps.trans s ss) = Steps.trans (SC s) (liftSeq ss)
-
-  storeEq : Store → Store → Bool
-  storeEq = vecEq
-    where
-      vecEq : ∀ {n} → Vec ℕ n → Vec ℕ n → Bool
-      vecEq []       []       = true
-      vecEq (x ∷ xs) (y ∷ ys) with ⌊ x Data.Nat.≟ y ⌋
-      ... | true  = vecEq xs ys
-      ... | false = false
 
   coinEq : ∀ {m} → Vec QVar m → Vec QVar m → Bool
   coinEq []       []       = true
@@ -289,11 +342,19 @@ module Semantics (kC kQ : ℕ) where
       just (setMany σ xs (evalMany σ ts) , ψ)
 
     eval (suc k) D (gate U qs) σ ψ =
-      just (σ , aply U ψ)
+      just (σ , aply U qs ψ)
 
     eval (suc k) D (seq C₁ C₂) σ ψ with eval k D C₁ σ ψ
     ... | nothing        = nothing
     ... | just (σ₁ , ψ₁) = eval k D C₂ σ₁ ψ₁
+
+    eval (suc k) D (ifte b C₁ C₂) σ ψ =
+      if evalBExp σ b
+      then eval k D C₁ σ ψ
+      else eval k D C₂ σ ψ
+
+    eval (suc k) D (while b C) σ ψ =
+      eval k D (ifte b (seq C (while b C)) skip) σ ψ
 
     eval (suc k) D (beginLocal xs ts C) σ ψ =
       eval k D (seq (assign xs ts)
@@ -308,17 +369,24 @@ module Semantics (kC kQ : ℕ) where
     ... | nothing                  = nothing
     ... | just (xs , (C , h))      = eval k D (beginLocal xs args C) σ ψ
 
-    eval (suc k) D (qif {m} {d} coin branches) σ ψ = evalQif k D coin branches σ ψ
+    eval (suc k) D (qif {m} {d} coin basis branches) σ ψ =
+      evalQif k D coin basis branches σ ψ
 
-    evalQif : ∀ {m d} → ℕ → Decls → Vec QVar m → Vec Cmd d → Store → QState → Maybe (Store × QState)
-    evalQif {m} {d} k D coin branches σ (split {m = m'} {d = d'} coin' α θ) 
-      with coinEqAny coin coin' | d Data.Nat.≟ d'
-    ... | false | _ = nothing
-    ... | _ | no _ = nothing
-    ... | true | yes refl with evalBranches k D branches σ θ
+    evalQif :
+      ∀ {m d} → ℕ → Decls → Vec QVar m → Vec BasisLabel d → Vec Cmd d →
+                Store → QState → Maybe (Store × QState)
+
+    evalQif {m} {d} k D coin basis branches σ (split {m = m'} {d = d'} coin' basis' α θ)
+      with externalQif coin branches | coinEqAny coin coin' | basisEqAny basis basis' | d Data.Nat.≟ d'
+    ... | false | _     | _     | _        = nothing
+    ... | _     | false | _     | _        = nothing
+    ... | _     | _     | false | _        = nothing
+    ... | _     | _     | _     | no _     = nothing
+    ... | true  | true  | true  | yes refl with evalBranches k D branches σ θ
     ...   | nothing = nothing
-    ...   | just (σ' , θ') = just (σ' , split coin α θ')
-    evalQif k D coin branches σ ψ = nothing
+    ...   | just (σ' , θ') = just (σ' , split coin basis α θ')
+
+    evalQif k D coin basis branches σ ψ = nothing
 
     evalBranches :
       ∀ {d} → ℕ → Decls → Vec Cmd d → Store → Vec QState d
@@ -333,10 +401,13 @@ module Semantics (kC kQ : ℕ) where
 
   postulate
     eval-sound-qif :
-      ∀ {fuel D m d} {coin : Vec QVar m} {branches : Vec Cmd d}
+      ∀ {fuel D m d}
+        {coin : Vec QVar m}
+        {basis : Vec BasisLabel d}
+        {branches : Vec Cmd d}
         {σ : Store} {ψ : QState} {σ' : Store} {ψ' : QState}
-      → eval fuel D (qif coin branches) σ ψ ≡ just (σ' , ψ')
-      → Steps D ⟨ qif coin branches , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
+      → eval fuel D (qif coin basis branches) σ ψ ≡ just (σ' , ψ')
+      → Steps D ⟨ qif coin basis branches , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
 
   eval-sound :
     ∀ {fuel D C σ ψ σ' ψ'}
@@ -404,7 +475,7 @@ module Semantics (kC kQ : ℕ) where
     | just (xs , (Cbody , h)) =
       Steps.trans (RC h) (eval-sound {fuel = k} {C = beginLocal xs args Cbody} eq)
 
-  eval-sound {fuel = suc k} {C = qif coin branches} eq =
+  eval-sound {fuel = suc k} {C = qif coin basis branches} eq =
     eval-sound-qif {fuel = suc k} eq
   
   eval-sound {fuel = suc k} {D} {C = beginLocal xs ts C} {σ} {ψ} {σ'} {ψ'} eq =
@@ -420,25 +491,46 @@ module Semantics (kC kQ : ℕ) where
         {ψ' = ψ'}
         eq)
 
+  eval-sound {fuel = suc k} {D} {C = ifte b C₁ C₂} {σ} {ψ} {σ'} {ψ'} eq
+    with evalBExp σ b in eb
+  ... | true =
+      Steps.trans (IF-true eb) (eval-sound {fuel = k} {D = D} {C = C₁} eq)
+  ... | false =
+      Steps.trans (IF-false eb) (eval-sound {fuel = k} {D = D} {C = C₂} eq)
 
--- EX
-module Example where
-  open Semantics 2 2
+  eval-sound {fuel = suc k} {D} {C = while b C} {σ} {ψ} {σ'} {ψ'} eq =
+    Steps.trans WH
+      (eval-sound
+        {fuel = k}
+        {D = D}
+        {C = ifte b (seq C (while b C)) skip}
+        {σ = σ}
+        {ψ = ψ}
+        {σ' = σ'}
+        {ψ' = ψ'}
+        eq)
 
-  open import Data.Fin using (zero)
 
-  σ0 : Store
-  σ0 = 0 ∷ 0 ∷ []
+-- EX -- Dumb example I was using the test things, this is no longer relevant now that we are embedded. I will construct a new one 
+-- module Example where
+--   open Semantics 2 2
 
-  ψ0 : QState
-  ψ0 = atom 0
+--   open import Data.Fin using (zero)
 
-  prog : Cmd
-  prog = seq (assign (zero ∷ []) (const 3 ∷ []))
-             (gate 0 (zero ∷ []))
+--   σ0 : Store
+--   σ0 = 0 ∷ 0 ∷ []
 
-  Ds : Decls
-  Ds = []ᴸ
+--   ψ0 : QState
+--   ψ0 = atom 0
 
-  ex : eval 10 Ds prog σ0 ψ0 ≡ just (setMany σ0 (zero ∷ []) (3 ∷ []) , aply 0 ψ0)
-  ex = refl
+--   prog : Cmd
+--   prog = seq (assign (zero ∷ []) (const 3 ∷ []))
+--              (gate 0 (zero ∷ []))
+
+--   Ds : Decls
+--   Ds = []ᴸ
+
+--   ex : eval 10 Ds prog σ0 ψ0 ≡ just (setMany σ0 (zero ∷ []) (3 ∷ []) , aply 0 ψ0)
+--   ex = refl
+
+
