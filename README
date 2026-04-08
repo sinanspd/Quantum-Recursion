@@ -18,3 +18,14 @@ Limitations:
 
 9. `setMany` performs updates left to right. This is usually fine if variables are distinct, but it is not the same as a true simultaneous substitution/update semantics if repeated variables are allowed. The same issue propagates into `beginLocal`
 
+10. The main theorem 
+
+```
+eval fuel D C σ ψ ≡ just (σ' , ψ') 
+....
+Steps D ⟨ C , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
+```
+
+is a one way soundness theorem. So it doesn't prove the converse: if the small-step semantics terminates, then there exists enough fuel such that eval returns that result. It also does not prove determinism, normalization, or evaluator completeness 
+
+
