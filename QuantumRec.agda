@@ -71,7 +71,7 @@ module Semantics (kC kQ : ℕ) where
   evalMany σ (e ∷ es) = evalExp σ e ∷ evalMany σ es
 
   ----------------
-  -- Boolean expressions for QC+  -- I had these in the first version, adding these back in
+  -- Boolean expressions for QC+  
   ----------------
 
   _≤ℕ_ : ℕ → ℕ → Bool
@@ -196,11 +196,6 @@ module Semantics (kC kQ : ℕ) where
   basisEq : ∀ {d} → Vec BasisLabel d → Vec BasisLabel d → Bool
   basisEq = natVecEq
 
-  basisEqAny : ∀ {m n} → Vec BasisLabel m → Vec BasisLabel n → Bool
-  basisEqAny {m} {n} xs ys with m Data.Nat.≟ n
-  ... | no _ = false
-  ... | yes refl = basisEq xs ys
-
   qvarInVec : ∀ {n} → QVar → Vec QVar n → Bool
   qvarInVec q [] = false
   qvarInVec q (x ∷ xs) with ⌊ q Data.Fin.≟ x ⌋
@@ -324,11 +319,6 @@ module Semantics (kC kQ : ℕ) where
   ... | true  = coinEq xs ys
   ... | false = false
 
-  coinEqAny : ∀ {m n} → Vec QVar m → Vec QVar n → Bool
-  coinEqAny {m} {n} xs ys with m Data.Nat.≟ n
-  ... | no _ = false
-  ... | yes refl = coinEq xs ys
-
   false≢true : false ≡ true → ⊥
   false≢true ()
 
@@ -435,16 +425,6 @@ module Semantics (kC kQ : ℕ) where
     ...   | nothing = nothing
     ...   | just (σ₂ , θs') =
           if storeEq σ₁ σ₂ then just (σ₁ , θ₁ ∷ θs') else nothing
-
-  -- postulate
-  --   eval-sound-qif :
-  --     ∀ {fuel D m d}
-  --       {coin : Vec QVar m}
-  --       {basis : Vec BasisLabel d}
-  --       {branches : Vec Cmd d}
-  --       {σ : Store} {ψ : QState} {σ' : Store} {ψ' : QState}
-  --     → eval fuel D (qif coin basis branches) σ ψ ≡ just (σ' , ψ')
-  --     → Steps D ⟨ qif coin basis branches , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
 
   mutual
     evalBranches-sound :
@@ -569,28 +549,13 @@ module Semantics (kC kQ : ℕ) where
     -- steps-++ composes the two 
     eval-sound {fuel = suc k} {D} {C = seq C₁ C₂} {σ} {ψ} {σ'} {ψ'} eq
       with eval k D C₁ σ ψ in eq₁
-    ... | nothing =
-          impossible eq
-      where
-        impossible :
-          nothing ≡ just (σ' , ψ') →
-          Steps D ⟨ seq C₁ C₂ , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
-        impossible ()
-    ... | just (σ₁ , ψ₁)
-      with eval k D C₂ σ₁ ψ₁ in eq₂
-    ... | nothing =
-          impossible₂ eq
-      where
-        impossible₂ :
-          nothing ≡ just (σ' , ψ') →
-          Steps D ⟨ seq C₁ C₂ , σ , ψ ⟩ ⟨ halt , σ' , ψ' ⟩
-        impossible₂ ()
-    ... | just (σ₂ , ψ₂)
-      with eq
-    ... | refl =
+    ... | nothing with eq
+    ...   | ()
+    eval-sound {fuel = suc k} {D} {C = seq C₁ C₂} {σ} {ψ} {σ'} {ψ'} eq
+      | just (σ₁ , ψ₁) =
         steps-++
           (liftSeq (eval-sound {fuel = k} {C = C₁} eq₁))
-          (Steps.trans SC-halt (eval-sound {fuel = k} {C = C₂} eq₂))
+          (Steps.trans SC-halt (eval-sound {fuel = k} {C = C₂} eq))
 
     eval-sound {fuel = suc k} {D} {C = call0 P} {σ} {ψ} {σ'} {ψ'} eq
       with find0 P D in eq₀
@@ -642,28 +607,4 @@ module Semantics (kC kQ : ℕ) where
           {σ' = σ'}
           {ψ' = ψ'}
           eq)
-
-
--- EX -- Dumb example I was using the test things, this is no longer relevant now that we are embedded. I will construct a new one 
--- module Example where
---   open Semantics 2 2
-
---   open import Data.Fin using (zero)
-
---   σ0 : Store
---   σ0 = 0 ∷ 0 ∷ []
-
---   ψ0 : QState
---   ψ0 = atom 0
-
---   prog : Cmd
---   prog = seq (assign (zero ∷ []) (const 3 ∷ []))
---              (gate 0 (zero ∷ []))
-
---   Ds : Decls
---   Ds = []ᴸ
-
---   ex : eval 10 Ds prog σ0 ψ0 ≡ just (setMany σ0 (zero ∷ []) (3 ∷ []) , aply 0 ψ0)
---   ex = refl
-
 
