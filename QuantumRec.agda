@@ -219,11 +219,88 @@ module Semantics (kC kQ : ℕ) where
     branchesTouch : ∀ {d} → Vec Cmd d → QVar → Bool
     branchesTouch [] q = false
     branchesTouch (C ∷ Cs) q = cmdTouches C q ∨ branchesTouch Cs q
+    
+  appendQVars : List QVar → List QVar → List QVar
+  appendQVars []ᴸ ys = ys
+  appendQVars (x ∷ᴸ xs) ys = x ∷ᴸ appendQVars xs ys
+
+  vecToQVars : ∀ {n} → Vec QVar n → List QVar
+  vecToQVars [] = []ᴸ
+  vecToQVars (q ∷ qs) = q ∷ᴸ vecToQVars qs
+
+  qvarInList : QVar → List QVar → Bool
+  qvarInList q []ᴸ = false
+  qvarInList q (x ∷ᴸ xs) with ⌊ q Data.Fin.≟ x ⌋
+  ... | true  = true
+  ... | false = qvarInList q xs
+
+  mutual
+    qv : Cmd → List QVar
+    qv skip = []ᴸ
+    qv halt = []ᴸ
+    qv (assign xs ts) = []ᴸ
+    qv (gate U qs) = vecToQVars qs
+    qv (seq C₁ C₂) = appendQVars (qv C₁) (qv C₂)
+    qv (ifte b C₁ C₂) = appendQVars (qv C₁) (qv C₂)
+    qv (while b C) = qv C
+    qv (qif coin basis branches) = appendQVars (vecToQVars coin) (qvBranches branches)
+    qv (beginLocal xs ts C) = qv C
+    qv (call0 P) = []ᴸ
+    qv (callN P args) = []ᴸ
+
+    qvBranches : ∀ {d} → Vec Cmd d → List QVar
+    qvBranches [] = []ᴸ
+    qvBranches (C ∷ Cs) = appendQVars (qv C) (qvBranches Cs)
+
+  qvarInList-appendQVars : ∀ q xs ys →
+    qvarInList q (appendQVars xs ys) ≡ (qvarInList q xs ∨ qvarInList q ys)
+  qvarInList-appendQVars q []ᴸ ys = refl
+  qvarInList-appendQVars q (x ∷ᴸ xs) ys with ⌊ q Data.Fin.≟ x ⌋
+  ... | true  = refl
+  ... | false = qvarInList-appendQVars q xs ys
+
+  qvarInList-vecToQVars : ∀ {n} q (qs : Vec QVar n) →
+    qvarInList q (vecToQVars qs) ≡ qvarInVec q qs
+  qvarInList-vecToQVars q [] = refl
+  qvarInList-vecToQVars q (x ∷ xs) with ⌊ q Data.Fin.≟ x ⌋
+  ... | true  = refl
+  ... | false = qvarInList-vecToQVars q xs
+
+  mutual
+    qv-correct : ∀ C q → qvarInList q (qv C) ≡ cmdTouches C q
+    qv-correct skip q = refl
+    qv-correct halt q = refl
+    qv-correct (assign xs ts) q = refl
+    qv-correct (gate U qs) q = qvarInList-vecToQVars q qs
+    qv-correct (seq C₁ C₂) q
+      rewrite qvarInList-appendQVars q (qv C₁) (qv C₂)
+            | qv-correct C₁ q
+            | qv-correct C₂ q = refl
+    qv-correct (ifte b C₁ C₂) q
+      rewrite qvarInList-appendQVars q (qv C₁) (qv C₂)
+            | qv-correct C₁ q
+            | qv-correct C₂ q = refl
+    qv-correct (while b C) q = qv-correct C q
+    qv-correct (qif coin basis branches) q
+      rewrite qvarInList-appendQVars q (vecToQVars coin) (qvBranches branches)
+            | qvarInList-vecToQVars q coin
+            | qvBranches-correct branches q = refl
+    qv-correct (beginLocal xs ts C) q = qv-correct C q
+    qv-correct (call0 P) q = refl
+    qv-correct (callN P args) q = refl
+
+    qvBranches-correct : ∀ {d} (branches : Vec Cmd d) q →
+      qvarInList q (qvBranches branches) ≡ branchesTouch branches q
+    qvBranches-correct [] q = refl
+    qvBranches-correct (C ∷ Cs) q
+      rewrite qvarInList-appendQVars q (qv C) (qvBranches Cs)
+            | qv-correct C q
+            | qvBranches-correct Cs q = refl
 
   externalQif : ∀ {m d} → Vec QVar m → Vec Cmd d → Bool
   externalQif [] branches = true
   externalQif (q ∷ qs) branches =
-    not (branchesTouch branches q) ∧ externalQif qs branches
+    not (qvarInList q (qvBranches branches)) ∧ externalQif qs branches
 
   -----------------
   --- Rules from the paper
