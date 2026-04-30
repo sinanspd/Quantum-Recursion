@@ -1,14 +1,21 @@
+This is an incomplete attempt to formalize the denotational semantics of 
+
+```
+Quantum Recursive Programming with Quantum Case Statements, Mingsheng Ying and Zhicheng Zhang, 2023
+
+```
+
+Big thanks to Elif Uskuplu for valuable discussion and feedback throughout the implementation. 
+
 Limitations: 
 
-1. The paper’s QC rule quantifies over arbitrary pure states and decomposes them as |ψ⟩ = Σ αᵢ |ψᵢ⟩_q |θᵢ⟩. My agda implementation approximates this with symbolic Qstates. This is enough to encode branch structure, but not enough to represent general superpositions, complex amplitudes, normalization, phases, tensor products, or true linear-algebraic equality. `qs : QState` is a symbolic syntax tree, not a full Hilber-space object. I will likely not tackle this. 
+1. The paper’s QC rule quantifies over arbitrary pure states and decomposes them as |ψ⟩ = Σ αᵢ |ψᵢ⟩_q |θᵢ⟩. My agda implementation approximates this with symbolic Qstates. This is enough to encode branch structure, but not enough to represent general superpositions, complex amplitudes, normalization, phases, tensor products, or true linear-algebraic equality. `qs : QState` is a symbolic syntax tree, not a full Hilber-space object.
 
-2. The paper has simple quantum vars and array quantum vars q[s₁,…,sₙ]. To model this, I would need to replace `QVar = Fin kQ` with a richer reference type and thread in classical-expression indexing through the quantum variable layer. I will likely not tackle this. 
+2. The paper has simple quantum vars and array quantum vars q[s₁,…,sₙ]. To model this, I would need to replace `QVar = Fin kQ` with a richer reference type and thread in classical-expression indexing through the quantum variable layer. 
 
 3. `UConst = ℕ ` is a symbolic tag for a unitary, and not a typed unitary constant. As a direct consequence, I do not encode the type matching condition from the paper `T(U) = T(q)` 
 
 4. `qif` in Definition III.1 carries an orthonormal basis { |ψ_i⟩ }. The constructor I created in Agda doesn't store that basis. 
-
-5. `qv : Cmd → ...` is missing 
 
 6. Disjointness cndition is missing. Gate `U qs` ignores `qs` in the state transformer, so the notion of “disjoint wires” is not semantically present yet.
 
